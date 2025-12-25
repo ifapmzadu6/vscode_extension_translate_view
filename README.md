@@ -1,16 +1,44 @@
 # VSCode Extension Translate View
 
-A Visual Studio Code extension for translation view functionality.
+VSCode拡張機能で、Markdownファイルをリアルタイムで翻訳し、サイドビューに表示します。
 
-## Features
+## 概要
 
-- Translation view support
-- Easy integration with VSCode
+この拡張機能は、VSCodeのエディタで開いているMarkdownファイルを自動的に翻訳し、セカンダリサイドビューに翻訳結果を表示します。エディタのスクロールに同期してサイドビューもスクロールするため、原文と翻訳文を並べて確認できます。
 
-## Development
+## 主な機能
 
-This project is in early development.
+### 🌐 翻訳機能
+- **Markdown翻訳**: メインエディタで開いているMarkdownファイルを自動翻訳
+- **LM API統合**: GPT-5-miniモデルを使用した高品質な翻訳
+- **リアルタイム表示**: 翻訳結果をWebViewに即座に表示
 
-## License
+### 📱 ユーザーインターフェース
+- **Secondary Side View**: 専用のサイドビューでWebViewを表示
+- **言語切り替え**: WebView上の地球アイコンから翻訳先言語を変更可能
+- **同期スクロール**: エディタのスクロールに合わせてWebViewも自動スクロール
+
+### ⚙️ 技術仕様
+- **言語モデル**: GPT-5-mini（固定）
+- **対象ファイル**: Markdownファイル（.md）
+- **表示方式**: WebView（セカンダリサイドビュー）
+
+## 使い方
+
+1. VSCodeでMarkdownファイルを開く
+2. コマンドパレット（Ctrl+Shift+P / Cmd+Shift+P）から翻訳ビューを開く
+3. サイドビューに翻訳結果が表示される
+4. 地球アイコンをクリックして翻訳先言語を選択
+5. エディタをスクロールすると、翻訳ビューも自動的に同期
+
+## 開発
+
+このプロジェクトは開発中です。
+
+### 必要な環境
+- Visual Studio Code 1.60.0以上
+- Node.js 14.x以上
+
+## ライセンス
 
 MIT
