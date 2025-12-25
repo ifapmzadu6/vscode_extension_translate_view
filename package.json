@@ -3,6 +3,7 @@
   "displayName": "Translate View",
   "description": "Markdownファイルをリアルタイムで翻訳し、サイドビューに表示するVSCode拡張機能",
   "version": "0.0.1",
+  "publisher": "translate-view",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -75,13 +76,15 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "build": "npm run compile && vsce package"
   },
   "devDependencies": {
     "@types/node": "^16.x",
     "@types/vscode": "^1.60.0",
     "@typescript-eslint/eslint-plugin": "^5.x",
     "@typescript-eslint/parser": "^5.x",
+    "@vscode/vsce": "^3.x",
     "eslint": "^8.x",
     "typescript": "^4.x"
   },
