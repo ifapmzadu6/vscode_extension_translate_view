@@ -6,7 +6,7 @@ let translateViewProvider: TranslateViewProvider;
 export function activate(context: vscode.ExtensionContext) {
     console.log('Translate View extension is now active!');
 
-    // WebViewプロバイダーを登録
+    // Register WebView provider
     translateViewProvider = new TranslateViewProvider(context.extensionUri);
 
     context.subscriptions.push(
@@ -16,14 +16,14 @@ export function activate(context: vscode.ExtensionContext) {
         )
     );
 
-    // コマンドを登録
+    // Register command
     context.subscriptions.push(
         vscode.commands.registerCommand('translateView.open', () => {
             vscode.commands.executeCommand('translateView.webview.focus');
         })
     );
 
-    // アクティブエディタの変更を監視
+    // Watch for active editor changes
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor((editor) => {
             if (editor && editor.document.languageId === 'markdown') {
@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // ドキュメントの変更を監視
+    // Watch for document changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((event) => {
             const activeEditor = vscode.window.activeTextEditor;
@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // エディタのスクロールを監視
+    // Watch for editor scroll
     context.subscriptions.push(
         vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
             if (event.textEditor.document.languageId === 'markdown' &&
@@ -55,7 +55,7 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // 初期表示
+    // Initial display
     if (vscode.window.activeTextEditor?.document.languageId === 'markdown') {
         translateViewProvider.updateContent(vscode.window.activeTextEditor.document);
     }

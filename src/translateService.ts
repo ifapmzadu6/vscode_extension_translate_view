@@ -6,7 +6,7 @@ export class TranslateService {
     public async translate(content: string, targetLanguage: string): Promise<string> {
         const cacheKey = `${targetLanguage}:${content}`;
 
-        // キャッシュチェック
+        // Check cache
         if (this._cache.has(cacheKey)) {
             return this._cache.get(cacheKey)!;
         }
@@ -14,7 +14,7 @@ export class TranslateService {
         const apiKey = vscode.workspace.getConfiguration('translateView').get<string>('apiKey');
 
         if (!apiKey) {
-            // APIキーがない場合はMarkdownをHTMLに変換して返す（デモモード）
+            // If no API key, convert Markdown to HTML (demo mode)
             return this._convertMarkdownToHtml(content, targetLanguage);
         }
 
@@ -87,7 +87,7 @@ export class TranslateService {
         let listType = '';
 
         for (const line of lines) {
-            // コードブロックの処理
+            // Handle code blocks
             if (line.startsWith('```')) {
                 if (!inCodeBlock) {
                     inCodeBlock = true;
@@ -107,7 +107,7 @@ export class TranslateService {
                 continue;
             }
 
-            // 空行の処理
+            // Handle empty lines
             if (line.trim() === '') {
                 if (inList) {
                     html += listType === 'ul' ? '</ul>\n' : '</ol>\n';
@@ -117,7 +117,7 @@ export class TranslateService {
                 continue;
             }
 
-            // 見出しの処理
+            // Handle headings
             const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
             if (headingMatch) {
                 if (inList) {
@@ -131,7 +131,7 @@ export class TranslateService {
                 continue;
             }
 
-            // リストの処理
+            // Handle lists
             const ulMatch = line.match(/^[\-\*]\s+(.+)$/);
             const olMatch = line.match(/^\d+\.\s+(.+)$/);
 
@@ -163,7 +163,7 @@ export class TranslateService {
                 continue;
             }
 
-            // 引用の処理
+            // Handle blockquotes
             const blockquoteMatch = line.match(/^>\s*(.*)$/);
             if (blockquoteMatch) {
                 if (inList) {
@@ -175,7 +175,7 @@ export class TranslateService {
                 continue;
             }
 
-            // 水平線の処理
+            // Handle horizontal rules
             if (line.match(/^(-{3,}|\*{3,}|_{3,})$/)) {
                 if (inList) {
                     html += listType === 'ul' ? '</ul>\n' : '</ol>\n';
@@ -186,7 +186,7 @@ export class TranslateService {
                 continue;
             }
 
-            // 通常の段落
+            // Normal paragraph
             if (inList) {
                 html += listType === 'ul' ? '</ul>\n' : '</ol>\n';
                 inList = false;
@@ -195,7 +195,7 @@ export class TranslateService {
             lineNumber++;
         }
 
-        // リストが閉じられていない場合
+        // Close unclosed list
         if (inList) {
             html += listType === 'ul' ? '</ul>\n' : '</ol>\n';
         }
@@ -204,24 +204,24 @@ export class TranslateService {
     }
 
     private _processInlineElements(text: string): string {
-        // HTMLエスケープ
+        // HTML escape
         text = this._escapeHtml(text);
 
-        // 太字 **text** または __text__
+        // Bold **text** or __text__
         text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
 
-        // 斜体 *text* または _text_
+        // Italic *text* or _text_
         text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
         text = text.replace(/_(.+?)_/g, '<em>$1</em>');
 
-        // インラインコード `code`
+        // Inline code `code`
         text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-        // リンク [text](url)
+        // Link [text](url)
         text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 
-        // 取り消し線 ~~text~~
+        // Strikethrough ~~text~~
         text = text.replace(/~~(.+?)~~/g, '<del>$1</del>');
 
         return text;

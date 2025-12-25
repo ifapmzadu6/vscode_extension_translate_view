@@ -27,7 +27,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-        // WebViewからのメッセージを処理
+        // Handle messages from WebView
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
                 case 'changeLanguage':
@@ -53,7 +53,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         this._currentDocument = document;
 
-        // デバウンス処理
+        // Debounce
         if (this._debounceTimer) {
             clearTimeout(this._debounceTimer);
         }
@@ -64,7 +64,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
             this._view!.webview.postMessage({
                 type: 'loading',
-                message: '翻訳中...'
+                message: 'Translating...'
             });
 
             try {
@@ -79,7 +79,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             } catch (error) {
                 this._view!.webview.postMessage({
                     type: 'error',
-                    message: error instanceof Error ? error.message : '翻訳エラーが発生しました'
+                    message: error instanceof Error ? error.message : 'Translation error occurred'
                 });
             }
         }, 500);
@@ -98,7 +98,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
         const nonce = getNonce();
 
         return `<!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
@@ -275,7 +275,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
         </div>
     </div>
     <div class="content" id="content">
-        <div class="placeholder">Markdownファイルを開いてください</div>
+        <div class="placeholder">Please open a Markdown file</div>
     </div>
 
     <script nonce="${nonce}">
@@ -301,14 +301,14 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         let selectedLanguage = 'ja';
 
-        // ドロップダウンの表示切り替え
+        // Toggle dropdown
         globeIcon.addEventListener('click', (e) => {
             e.stopPropagation();
             dropdown.classList.toggle('show');
             updateDropdownSelection();
         });
 
-        // 言語選択
+        // Language selection
         document.querySelectorAll('.dropdown-item').forEach(item => {
             item.addEventListener('click', () => {
                 const lang = item.dataset.lang;
@@ -319,7 +319,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             });
         });
 
-        // ドロップダウン外クリックで閉じる
+        // Close dropdown on outside click
         document.addEventListener('click', () => {
             dropdown.classList.remove('show');
         });
@@ -330,7 +330,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             });
         }
 
-        // メッセージ受信
+        // Receive messages
         window.addEventListener('message', event => {
             const message = event.data;
             switch (message.type) {
@@ -356,7 +356,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             }
         });
 
-        // 準備完了を通知
+        // Notify ready
         vscode.postMessage({ type: 'ready' });
     </script>
 </body>
