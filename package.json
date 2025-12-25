@@ -45,15 +45,19 @@
         "translateView.targetLanguage": {
           "type": "string",
           "default": "ja",
-          "enum": ["ja", "en", "zh", "ko", "es", "fr", "de"],
+          "enum": ["en", "ja", "zh-hans", "zh-hant", "ko", "de", "fr", "es", "it", "pt-br", "ru"],
           "enumDescriptions": [
-            "日本語",
             "English",
-            "中文",
+            "日本語",
+            "中文（简体）",
+            "中文（繁體）",
             "한국어",
-            "Español",
+            "Deutsch",
             "Français",
-            "Deutsch"
+            "Español",
+            "Italiano",
+            "Português (Brasil)",
+            "Русский"
           ],
           "description": "翻訳先の言語"
         },

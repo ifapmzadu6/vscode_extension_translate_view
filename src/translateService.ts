@@ -30,13 +30,17 @@ export class TranslateService {
 
     private async _callTranslateApi(content: string, targetLanguage: string, apiKey: string): Promise<string> {
         const languageNames: { [key: string]: string } = {
-            'ja': 'Japanese',
             'en': 'English',
-            'zh': 'Chinese',
+            'ja': 'Japanese',
+            'zh-hans': 'Simplified Chinese',
+            'zh-hant': 'Traditional Chinese',
             'ko': 'Korean',
-            'es': 'Spanish',
+            'de': 'German',
             'fr': 'French',
-            'de': 'German'
+            'es': 'Spanish',
+            'it': 'Italian',
+            'pt-br': 'Brazilian Portuguese',
+            'ru': 'Russian'
         };
 
         const targetLangName = languageNames[targetLanguage] || targetLanguage;

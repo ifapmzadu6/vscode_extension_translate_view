@@ -259,13 +259,17 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             <div class="language-dropdown">
                 <span class="globe-icon" id="globeIcon">🌐</span>
                 <div class="dropdown-content" id="dropdown">
-                    <div class="dropdown-item" data-lang="ja">日本語</div>
                     <div class="dropdown-item" data-lang="en">English</div>
-                    <div class="dropdown-item" data-lang="zh">中文</div>
+                    <div class="dropdown-item" data-lang="ja">日本語</div>
+                    <div class="dropdown-item" data-lang="zh-hans">中文（简体）</div>
+                    <div class="dropdown-item" data-lang="zh-hant">中文（繁體）</div>
                     <div class="dropdown-item" data-lang="ko">한국어</div>
-                    <div class="dropdown-item" data-lang="es">Español</div>
-                    <div class="dropdown-item" data-lang="fr">Français</div>
                     <div class="dropdown-item" data-lang="de">Deutsch</div>
+                    <div class="dropdown-item" data-lang="fr">Français</div>
+                    <div class="dropdown-item" data-lang="es">Español</div>
+                    <div class="dropdown-item" data-lang="it">Italiano</div>
+                    <div class="dropdown-item" data-lang="pt-br">Português (Brasil)</div>
+                    <div class="dropdown-item" data-lang="ru">Русский</div>
                 </div>
             </div>
         </div>
@@ -282,13 +286,17 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
         const currentLang = document.getElementById('currentLang');
 
         const languageNames = {
-            'ja': '日本語',
             'en': 'English',
-            'zh': '中文',
+            'ja': '日本語',
+            'zh-hans': '中文（简体）',
+            'zh-hant': '中文（繁體）',
             'ko': '한국어',
-            'es': 'Español',
+            'de': 'Deutsch',
             'fr': 'Français',
-            'de': 'Deutsch'
+            'es': 'Español',
+            'it': 'Italiano',
+            'pt-br': 'Português (Brasil)',
+            'ru': 'Русский'
         };
 
         let selectedLanguage = 'ja';
