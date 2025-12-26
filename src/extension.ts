@@ -45,6 +45,8 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private _currentDocument?: vscode.TextDocument;
     private _debounceTimer?: NodeJS.Timeout;
+    private _isTranslating = false;
+    private _pendingDocument?: vscode.TextDocument;
 
     constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -69,21 +71,45 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         if (!this._view) return;
         this._currentDocument = document;
 
+        // If translation is in progress, save as pending and return
+        if (this._isTranslating) {
+            this._pendingDocument = document;
+            return;
+        }
+
         if (this._debounceTimer) clearTimeout(this._debounceTimer);
 
         this._debounceTimer = setTimeout(async () => {
-            const content = document.getText();
-            const targetLanguage = vscode.workspace.getConfiguration('translateView').get<string>('targetLanguage') || 'ja';
-
-            this._view!.webview.postMessage({ type: 'loading' });
-
-            try {
-                const translatedContent = await translate(content, targetLanguage);
-                this._view!.webview.postMessage({ type: 'update', content: translatedContent, language: targetLanguage });
-            } catch (error) {
-                this._view!.webview.postMessage({ type: 'error', message: error instanceof Error ? error.message : 'Translation error occurred' });
-            }
+            await this._executeTranslation(document);
         }, 500);
+    }
+
+    private async _executeTranslation(document: vscode.TextDocument) {
+        if (!this._view) return;
+
+        this._isTranslating = true;
+        this._pendingDocument = undefined;
+
+        const content = document.getText();
+        const targetLanguage = vscode.workspace.getConfiguration('translateView').get<string>('targetLanguage') || 'ja';
+
+        this._view.webview.postMessage({ type: 'loading' });
+
+        try {
+            const translatedContent = await translate(content, targetLanguage);
+            this._view.webview.postMessage({ type: 'update', content: translatedContent, language: targetLanguage });
+        } catch (error) {
+            this._view.webview.postMessage({ type: 'error', message: error instanceof Error ? error.message : 'Translation error occurred' });
+        } finally {
+            this._isTranslating = false;
+
+            // If there's a pending document, translate it now
+            if (this._pendingDocument) {
+                const pending = this._pendingDocument;
+                this._pendingDocument = undefined;
+                await this._executeTranslation(pending);
+            }
+        }
     }
 
     public syncScroll(lineNumber: number) {
