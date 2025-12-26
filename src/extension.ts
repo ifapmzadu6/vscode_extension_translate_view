@@ -4,7 +4,6 @@ import * as crypto from 'crypto';
 // Constants
 const DEBOUNCE_DELAY_MS = 500;
 const DEFAULT_LANGUAGE = 'ja';
-const TRANSLATION_TIMEOUT_MS = 60000;
 const MARKDOWN_LANGUAGE_ID = 'markdown';
 
 // Valid language codes from package.json configuration
@@ -100,11 +99,6 @@ ${content}`;
     const messages = [vscode.LanguageModelChatMessage.User(prompt)];
     const cancellationTokenSource = new vscode.CancellationTokenSource();
 
-    // Set up timeout
-    const timeoutId = setTimeout(() => {
-        cancellationTokenSource.cancel();
-    }, TRANSLATION_TIMEOUT_MS);
-
     try {
         const response = await cachedModel.sendRequest(messages, {}, cancellationTokenSource.token);
         const chunks: string[] = [];
@@ -123,7 +117,6 @@ ${content}`;
         }
         throw error;
     } finally {
-        clearTimeout(timeoutId);
         cancellationTokenSource.dispose();
     }
 }
