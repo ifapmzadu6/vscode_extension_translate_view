@@ -1,0 +1,86 @@
+{
+  "name": "translate-view",
+  "displayName": "Translate View",
+  "description": "Translate Markdown files in real-time and display in a side view",
+  "version": "0.0.1",
+  "publisher": "translate-view",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "translateView.open",
+        "title": "Open Translate View",
+        "category": "Translate View"
+      }
+    ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "translateViewContainer",
+          "title": "Translate View",
+          "icon": "$(globe)"
+        }
+      ]
+    },
+    "views": {
+      "translateViewContainer": [
+        {
+          "type": "webview",
+          "id": "translateView.webview",
+          "name": "Translation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Translate View",
+      "properties": {
+        "translateView.targetLanguage": {
+          "type": "string",
+          "default": "ja",
+          "enum": ["en", "ja", "zh-hans", "zh-hant", "ko", "de", "fr", "es", "it", "pt-br", "ru"],
+          "enumDescriptions": [
+            "English",
+            "日本語",
+            "中文（简体）",
+            "中文（繁體）",
+            "한국어",
+            "Deutsch",
+            "Français",
+            "Español",
+            "Italiano",
+            "Português (Brasil)",
+            "Русский"
+          ],
+          "description": "Target language for translation"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "build": "npm run compile && vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.x",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^8.x",
+    "@typescript-eslint/parser": "^8.x",
+    "@vscode/vsce": "^3.x",
+    "eslint": "^9.x",
+    "typescript": "^5.x"
+  }
+}
