@@ -10,18 +10,13 @@ const MessageType = {
     Scroll: 'scroll',
 } as const;
 
-// Type definitions
-interface WebviewMessage {
-    type: typeof MessageType[keyof typeof MessageType];
-    language?: string;
-    content?: string;
-    message?: string;
-    line?: number;
-}
-
 interface IncomingMessage {
     type: string;
     language?: string;
+}
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : 'Translation error occurred';
 }
 
 const LANGUAGE_NAMES: { [key: string]: string } = {
@@ -121,8 +116,7 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         this._debounceTimer = setTimeout(() => {
             this._executeTranslation(document).catch((error: unknown) => {
-                const errorMessage = error instanceof Error ? error.message : 'Translation error occurred';
-                this._view?.webview.postMessage({ type: MessageType.Error, message: errorMessage } as WebviewMessage);
+                this._view?.webview.postMessage({ type: MessageType.Error, message: getErrorMessage(error) });
             });
         }, 500);
     }
@@ -138,13 +132,13 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         const content = document.getText();
         const targetLanguage = vscode.workspace.getConfiguration('translateView').get<string>('targetLanguage') || 'ja';
 
-        this._view.webview.postMessage({ type: MessageType.Loading } as WebviewMessage);
+        this._view.webview.postMessage({ type: MessageType.Loading });
 
         try {
             const translatedContent = await translate(content, targetLanguage);
-            this._view?.webview.postMessage({ type: MessageType.Update, content: translatedContent, language: targetLanguage } as WebviewMessage);
+            this._view?.webview.postMessage({ type: MessageType.Update, content: translatedContent, language: targetLanguage });
         } catch (error) {
-            this._view?.webview.postMessage({ type: MessageType.Error, message: error instanceof Error ? error.message : 'Translation error occurred' } as WebviewMessage);
+            this._view?.webview.postMessage({ type: MessageType.Error, message: getErrorMessage(error) });
         } finally {
             this._isTranslating = false;
 
@@ -158,7 +152,7 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
     }
 
     public syncScroll(lineNumber: number): void {
-        this._view?.webview.postMessage({ type: MessageType.Scroll, line: lineNumber } as WebviewMessage);
+        this._view?.webview.postMessage({ type: MessageType.Scroll, line: lineNumber });
     }
 
     private _getHtml(webview: vscode.Webview): string {
@@ -277,8 +271,7 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
                     errorDiv.textContent = msg.message;
                     content.appendChild(errorDiv);
                 } else if (msg.type === 'scroll') {
-                    // Use cached element for efficient lookup
-                    const target = lineElements.get(msg.line) || document.querySelector('[data-line="' + msg.line + '"]');
+                    const target = lineElements.get(msg.line);
                     if (target) {
                         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
