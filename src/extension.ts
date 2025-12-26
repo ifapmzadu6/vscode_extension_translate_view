@@ -38,15 +38,7 @@ const LANGUAGE_NAMES: { [key: string]: string } = {
     'ru': 'Russian'
 };
 
-// Maximum content size (50KB)
-const MAX_CONTENT_SIZE = 50000;
-
 async function translate(content: string, targetLanguage: string): Promise<string> {
-    // Validate content size
-    if (content.length > MAX_CONTENT_SIZE) {
-        throw new Error(`Document is too large (${content.length} characters). Maximum allowed is ${MAX_CONTENT_SIZE} characters.`);
-    }
-
     const models = await vscode.lm.selectChatModels();
     if (models.length === 0) {
         throw new Error('No language model available. Please install GitHub Copilot or another language model extension.');
