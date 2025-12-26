@@ -14,14 +14,7 @@ const LANGUAGE_NAMES: { [key: string]: string } = {
     'ru': 'Russian'
 };
 
-const cache: Map<string, string> = new Map();
-
 async function translate(content: string, targetLanguage: string): Promise<string> {
-    const cacheKey = `${targetLanguage}:${content}`;
-    if (cache.has(cacheKey)) {
-        return cache.get(cacheKey)!;
-    }
-
     const models = await vscode.lm.selectChatModels();
     if (models.length === 0) {
         throw new Error('No language model available. Please install GitHub Copilot or another language model extension.');
@@ -41,9 +34,7 @@ ${content}`;
         for await (const chunk of response.text) {
             result += chunk;
         }
-        const translated = result || content;
-        cache.set(cacheKey, translated);
-        return translated;
+        return result || content;
     } finally {
         cancellationTokenSource.dispose();
     }
