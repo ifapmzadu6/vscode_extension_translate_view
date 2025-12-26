@@ -15,7 +15,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
+        _context: vscode.WebviewViewResolveContext,
         _token: vscode.CancellationToken
     ) {
         this._view = webviewView;
@@ -258,19 +258,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             <span id="currentLang">日本語</span>
             <div class="language-dropdown">
                 <span class="globe-icon" id="globeIcon">🌐</span>
-                <div class="dropdown-content" id="dropdown">
-                    <div class="dropdown-item" data-lang="en">English</div>
-                    <div class="dropdown-item" data-lang="ja">日本語</div>
-                    <div class="dropdown-item" data-lang="zh-hans">中文（简体）</div>
-                    <div class="dropdown-item" data-lang="zh-hant">中文（繁體）</div>
-                    <div class="dropdown-item" data-lang="ko">한국어</div>
-                    <div class="dropdown-item" data-lang="de">Deutsch</div>
-                    <div class="dropdown-item" data-lang="fr">Français</div>
-                    <div class="dropdown-item" data-lang="es">Español</div>
-                    <div class="dropdown-item" data-lang="it">Italiano</div>
-                    <div class="dropdown-item" data-lang="pt-br">Português (Brasil)</div>
-                    <div class="dropdown-item" data-lang="ru">Русский</div>
-                </div>
+                <div class="dropdown-content" id="dropdown"></div>
             </div>
         </div>
     </div>
@@ -301,22 +289,26 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         let selectedLanguage = 'ja';
 
+        // Build dropdown items
+        Object.entries(languageNames).forEach(([lang, name]) => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            item.dataset.lang = lang;
+            item.textContent = name;
+            item.addEventListener('click', () => {
+                selectedLanguage = lang;
+                currentLang.textContent = name;
+                dropdown.classList.remove('show');
+                vscode.postMessage({ type: 'changeLanguage', language: lang });
+            });
+            dropdown.appendChild(item);
+        });
+
         // Toggle dropdown
         globeIcon.addEventListener('click', (e) => {
             e.stopPropagation();
             dropdown.classList.toggle('show');
             updateDropdownSelection();
-        });
-
-        // Language selection
-        document.querySelectorAll('.dropdown-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const lang = item.dataset.lang;
-                selectedLanguage = lang;
-                currentLang.textContent = languageNames[lang];
-                dropdown.classList.remove('show');
-                vscode.postMessage({ type: 'changeLanguage', language: lang });
-            });
         });
 
         // Close dropdown on outside click
