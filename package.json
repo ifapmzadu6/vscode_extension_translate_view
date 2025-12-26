@@ -5,7 +5,7 @@
   "version": "0.0.1",
   "publisher": "translate-view",
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Other"
@@ -61,11 +61,6 @@
             "Русский"
           ],
           "description": "Target language for translation"
-        },
-        "translateView.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "OpenAI API Key for GPT-5-mini"
         }
       }
     }
@@ -81,7 +76,7 @@
   },
   "devDependencies": {
     "@types/node": "^16.x",
-    "@types/vscode": "^1.60.0",
+    "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^5.x",
     "@typescript-eslint/parser": "^5.x",
     "@vscode/vsce": "^3.x",

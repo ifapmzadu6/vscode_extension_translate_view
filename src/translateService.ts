@@ -3,6 +3,20 @@ import * as vscode from 'vscode';
 export class TranslateService {
     private _cache: Map<string, string> = new Map();
 
+    private readonly _languageNames: { [key: string]: string } = {
+        'en': 'English',
+        'ja': 'Japanese',
+        'zh-hans': 'Simplified Chinese',
+        'zh-hant': 'Traditional Chinese',
+        'ko': 'Korean',
+        'de': 'German',
+        'fr': 'French',
+        'es': 'Spanish',
+        'it': 'Italian',
+        'pt-br': 'Brazilian Portuguese',
+        'ru': 'Russian'
+    };
+
     public async translate(content: string, targetLanguage: string): Promise<string> {
         const cacheKey = `${targetLanguage}:${content}`;
 
@@ -11,65 +25,37 @@ export class TranslateService {
             return this._cache.get(cacheKey)!;
         }
 
-        const apiKey = vscode.workspace.getConfiguration('translateView').get<string>('apiKey');
-
-        if (!apiKey) {
-            // If no API key, convert Markdown to HTML (demo mode)
-            return this._convertMarkdownToHtml(content);
-        }
-
-        const translatedContent = await this._callTranslateApi(content, targetLanguage, apiKey);
+        const translatedContent = await this._callLanguageModelApi(content, targetLanguage);
         const htmlContent = this._convertMarkdownToHtml(translatedContent);
         this._cache.set(cacheKey, htmlContent);
         return htmlContent;
     }
 
-    private async _callTranslateApi(content: string, targetLanguage: string, apiKey: string): Promise<string> {
-        const languageNames: { [key: string]: string } = {
-            'en': 'English',
-            'ja': 'Japanese',
-            'zh-hans': 'Simplified Chinese',
-            'zh-hant': 'Traditional Chinese',
-            'ko': 'Korean',
-            'de': 'German',
-            'fr': 'French',
-            'es': 'Spanish',
-            'it': 'Italian',
-            'pt-br': 'Brazilian Portuguese',
-            'ru': 'Russian'
-        };
+    private async _callLanguageModelApi(content: string, targetLanguage: string): Promise<string> {
+        const targetLangName = this._languageNames[targetLanguage] || targetLanguage;
 
-        const targetLangName = languageNames[targetLanguage] || targetLanguage;
-
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: 'gpt-5-mini',
-                messages: [
-                    {
-                        role: 'system',
-                        content: `You are a translator. Translate the following Markdown content to ${targetLangName}. Keep the Markdown formatting intact. Only translate the text content, not the Markdown syntax or code blocks.`
-                    },
-                    {
-                        role: 'user',
-                        content: content
-                    }
-                ],
-                temperature: 0.3
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`API Error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+        // Select available chat model
+        const models = await vscode.lm.selectChatModels();
+        if (models.length === 0) {
+            throw new Error('No language model available. Please install GitHub Copilot or another language model extension.');
         }
 
-        const data = await response.json();
-        return data.choices[0]?.message?.content || content;
+        const model = models[0];
+        const prompt = `Translate the following Markdown content to ${targetLangName}. Keep the Markdown formatting intact. Only translate the text content, not the Markdown syntax or code blocks. Output only the translated content without any explanation.
+
+${content}`;
+
+        const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+
+        const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+
+        // Collect response chunks
+        let result = '';
+        for await (const chunk of response.text) {
+            result += chunk;
+        }
+
+        return result || content;
     }
 
     private _convertMarkdownToHtml(markdown: string): string {
