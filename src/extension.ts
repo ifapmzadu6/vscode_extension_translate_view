@@ -1,4 +1,15 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
+
+// Constants
+const DEBOUNCE_DELAY_MS = 500;
+const DEFAULT_LANGUAGE = 'ja';
+const TRANSLATION_TIMEOUT_MS = 60000;
+const MARKDOWN_LANGUAGE_ID = 'markdown';
+
+// Valid language codes from package.json configuration
+const VALID_LANGUAGES = ['en', 'ja', 'zh-hans', 'zh-hant', 'ko', 'de', 'fr', 'es', 'it', 'pt-br', 'ru'] as const;
+type ValidLanguage = typeof VALID_LANGUAGES[number];
 
 // Constants for message types
 const MessageType = {
@@ -10,16 +21,45 @@ const MessageType = {
     Scroll: 'scroll',
 } as const;
 
+type MessageTypeValue = typeof MessageType[keyof typeof MessageType];
+
+/** Message received from webview */
 interface IncomingMessage {
-    type: string;
+    type: typeof MessageType.ChangeLanguage | typeof MessageType.Ready;
     language?: string;
 }
 
+/** Message sent to webview */
+interface OutgoingMessage {
+    type: MessageTypeValue;
+    content?: string;
+    message?: string;
+    language?: string;
+    line?: number;
+}
+
+/**
+ * Extracts error message from unknown error type
+ */
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Translation error occurred';
 }
 
-const LANGUAGE_NAMES: { [key: string]: string } = {
+/**
+ * Validates if a language code is valid
+ */
+function isValidLanguage(lang: string): lang is ValidLanguage {
+    return VALID_LANGUAGES.includes(lang as ValidLanguage);
+}
+
+/**
+ * Generates a cryptographically secure nonce for CSP
+ */
+function generateNonce(): string {
+    return crypto.randomBytes(16).toString('base64');
+}
+
+const LANGUAGE_NAMES: Record<ValidLanguage, string> = {
     'en': 'English',
     'ja': 'Japanese',
     'zh-hans': 'Simplified Chinese',
@@ -33,13 +73,26 @@ const LANGUAGE_NAMES: { [key: string]: string } = {
     'ru': 'Russian'
 };
 
+// Cached model for performance
+let cachedModel: vscode.LanguageModelChat | undefined;
+
+/**
+ * Translates Markdown content to the target language using VSCode Language Model API
+ * @param content - The Markdown content to translate
+ * @param targetLanguage - Target language code (e.g., 'ja', 'en')
+ * @returns Translated content or throws an error if translation fails
+ */
 async function translate(content: string, targetLanguage: string): Promise<string> {
-    const models = await vscode.lm.selectChatModels();
-    if (models.length === 0) {
-        throw new Error('No language model available. Please install GitHub Copilot or another language model extension.');
+    // Use cached model if available, otherwise select and cache
+    if (!cachedModel) {
+        const models = await vscode.lm.selectChatModels();
+        if (models.length === 0) {
+            throw new Error('No language model available. Please install GitHub Copilot or another language model extension.');
+        }
+        cachedModel = models[0];
     }
 
-    const targetLangName = LANGUAGE_NAMES[targetLanguage] || targetLanguage;
+    const targetLangName = LANGUAGE_NAMES[targetLanguage as ValidLanguage] || targetLanguage;
     const prompt = `Translate the following Markdown content to ${targetLangName}. Keep the Markdown formatting intact. Only translate the text content, not the Markdown syntax or code blocks. Output only the translated content without any explanation.
 
 ${content}`;
@@ -47,19 +100,37 @@ ${content}`;
     const messages = [vscode.LanguageModelChatMessage.User(prompt)];
     const cancellationTokenSource = new vscode.CancellationTokenSource();
 
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+        cancellationTokenSource.cancel();
+    }, TRANSLATION_TIMEOUT_MS);
+
     try {
-        const response = await models[0].sendRequest(messages, {}, cancellationTokenSource.token);
-        // Use array and join for better performance with large responses
+        const response = await cachedModel.sendRequest(messages, {}, cancellationTokenSource.token);
         const chunks: string[] = [];
         for await (const chunk of response.text) {
             chunks.push(chunk);
         }
-        return chunks.join('') || content;
+        const result = chunks.join('');
+        if (!result) {
+            console.warn('[TranslateView] Translation returned empty result, using original content');
+        }
+        return result || content;
+    } catch (error) {
+        // Clear cached model on error in case the model became unavailable
+        if (error instanceof Error && error.message.includes('model')) {
+            cachedModel = undefined;
+        }
+        throw error;
     } finally {
+        clearTimeout(timeoutId);
         cancellationTokenSource.dispose();
     }
 }
 
+/**
+ * Webview provider for the translation view panel
+ */
 class TranslateViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'translateView.webview';
     private _view?: vscode.WebviewView;
@@ -81,6 +152,13 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    /**
+     * Sends a message to the webview with type safety
+     */
+    private postMessage(message: OutgoingMessage): void {
+        this._view?.webview.postMessage(message);
+    }
+
     public resolveWebviewView(webviewView: vscode.WebviewView): void {
         this._view = webviewView;
         webviewView.webview.options = { enableScripts: true, localResourceRoots: [this._extensionUri] };
@@ -88,18 +166,28 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.onDidReceiveMessage(async (data: IncomingMessage) => {
             if (data.type === MessageType.ChangeLanguage && data.language) {
+                // Validate language before saving
+                if (!isValidLanguage(data.language)) {
+                    console.error(`[TranslateView] Invalid language code received: ${data.language}`);
+                    return;
+                }
                 await vscode.workspace.getConfiguration('translateView').update('targetLanguage', data.language, vscode.ConfigurationTarget.Global);
                 if (this._currentDocument) {
                     this.updateContent(this._currentDocument);
                 }
             } else if (data.type === MessageType.Ready) {
-                if (vscode.window.activeTextEditor?.document.languageId === 'markdown') {
-                    this.updateContent(vscode.window.activeTextEditor.document);
+                const editor = vscode.window.activeTextEditor;
+                if (editor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
+                    this.updateContent(editor.document);
                 }
             }
         });
     }
 
+    /**
+     * Updates the translation view with the content of the given document
+     * Uses debouncing to prevent excessive API calls during rapid edits
+     */
     public async updateContent(document: vscode.TextDocument): Promise<void> {
         if (!this._view) {
             return;
@@ -116,9 +204,10 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         this._debounceTimer = setTimeout(() => {
             this._executeTranslation(document).catch((error: unknown) => {
-                this._view?.webview.postMessage({ type: MessageType.Error, message: getErrorMessage(error) });
+                console.error('[TranslateView] Translation failed:', error);
+                this.postMessage({ type: MessageType.Error, message: getErrorMessage(error) });
             });
-        }, 500);
+        }, DEBOUNCE_DELAY_MS);
     }
 
     private async _executeTranslation(document: vscode.TextDocument): Promise<void> {
@@ -130,15 +219,17 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         this._pendingDocument = undefined;
 
         const content = document.getText();
-        const targetLanguage = vscode.workspace.getConfiguration('translateView').get<string>('targetLanguage') || 'ja';
+        const configuredLanguage = vscode.workspace.getConfiguration('translateView').get<string>('targetLanguage');
+        const targetLanguage = (configuredLanguage && isValidLanguage(configuredLanguage)) ? configuredLanguage : DEFAULT_LANGUAGE;
 
-        this._view.webview.postMessage({ type: MessageType.Loading });
+        this.postMessage({ type: MessageType.Loading });
 
         try {
             const translatedContent = await translate(content, targetLanguage);
-            this._view?.webview.postMessage({ type: MessageType.Update, content: translatedContent, language: targetLanguage });
+            this.postMessage({ type: MessageType.Update, content: translatedContent, language: targetLanguage });
         } catch (error) {
-            this._view?.webview.postMessage({ type: MessageType.Error, message: getErrorMessage(error) });
+            console.error('[TranslateView] Translation error:', error);
+            this.postMessage({ type: MessageType.Error, message: getErrorMessage(error) });
         } finally {
             this._isTranslating = false;
 
@@ -151,12 +242,15 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    /**
+     * Synchronizes scroll position with the editor
+     */
     public syncScroll(lineNumber: number): void {
-        this._view?.webview.postMessage({ type: MessageType.Scroll, line: lineNumber });
+        this.postMessage({ type: MessageType.Scroll, line: lineNumber });
     }
 
     private _getHtml(webview: vscode.Webview): string {
-        const nonce = Array.from({ length: 32 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 62)]).join('');
+        const nonce = generateNonce();
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -191,14 +285,14 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
     <div class="header">
         <span class="title">Translation</span>
         <div class="language-selector">
-            <span id="currentLang">日本語</span>
+            <span id="currentLang" aria-live="polite">日本語</span>
             <div class="language-dropdown">
-                <span class="globe-icon" id="globeIcon">🌐</span>
-                <div class="dropdown-content" id="dropdown"></div>
+                <span class="globe-icon" id="globeIcon" role="button" tabindex="0" aria-label="Change translation language" aria-haspopup="listbox" aria-expanded="false">🌐</span>
+                <div class="dropdown-content" id="dropdown" role="listbox" aria-label="Select language"></div>
             </div>
         </div>
     </div>
-    <div class="content" id="content"><span class="placeholder">Please open a Markdown file</span></div>
+    <div class="content" id="content" role="region" aria-label="Translated content" aria-live="polite"><span class="placeholder">Please open a Markdown file</span></div>
     <script nonce="${nonce}">
         (function() {
             const vscode = acquireVsCodeApi();
@@ -208,9 +302,46 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
             const currentLang = document.getElementById('currentLang');
             const langs = { 'en': 'English', 'ja': '日本語', 'zh-hans': '中文（简体）', 'zh-hant': '中文（繁體）', 'ko': '한국어', 'de': 'Deutsch', 'fr': 'Français', 'es': 'Español', 'it': 'Italiano', 'pt-br': 'Português (Brasil)', 'ru': 'Русский' };
             let selectedLanguage = 'ja';
+            let focusedIndex = -1;
+            const langKeys = Object.keys(langs);
 
             // Build line elements map for efficient lookup
             const lineElements = new Map();
+
+            function selectLanguage(lang, name) {
+                selectedLanguage = lang;
+                currentLang.textContent = name;
+                closeDropdown();
+                vscode.postMessage({ type: 'changeLanguage', language: lang });
+            }
+
+            function openDropdown() {
+                dropdown.classList.add('show');
+                globeIcon.setAttribute('aria-expanded', 'true');
+                document.querySelectorAll('.dropdown-item').forEach(function(item) {
+                    const isSelected = item.dataset.lang === selectedLanguage;
+                    item.classList.toggle('selected', isSelected);
+                    item.setAttribute('aria-selected', isSelected.toString());
+                });
+                focusedIndex = langKeys.indexOf(selectedLanguage);
+                if (focusedIndex >= 0) {
+                    dropdown.children[focusedIndex].focus();
+                }
+            }
+
+            function closeDropdown() {
+                dropdown.classList.remove('show');
+                globeIcon.setAttribute('aria-expanded', 'false');
+                focusedIndex = -1;
+            }
+
+            function toggleDropdown() {
+                if (dropdown.classList.contains('show')) {
+                    closeDropdown();
+                } else {
+                    openDropdown();
+                }
+            }
 
             Object.entries(langs).forEach(function(entry) {
                 const lang = entry[0];
@@ -219,24 +350,61 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
                 item.className = 'dropdown-item';
                 item.dataset.lang = lang;
                 item.textContent = name;
+                item.setAttribute('role', 'option');
+                item.setAttribute('tabindex', '-1');
                 item.addEventListener('click', function() {
-                    selectedLanguage = lang;
-                    currentLang.textContent = name;
-                    dropdown.classList.remove('show');
-                    vscode.postMessage({ type: 'changeLanguage', language: lang });
+                    selectLanguage(lang, name);
+                });
+                item.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        selectLanguage(lang, name);
+                    }
                 });
                 dropdown.appendChild(item);
             });
 
             globeIcon.addEventListener('click', function(e) {
                 e.stopPropagation();
-                dropdown.classList.toggle('show');
-                document.querySelectorAll('.dropdown-item').forEach(function(item) {
-                    item.classList.toggle('selected', item.dataset.lang === selectedLanguage);
-                });
+                toggleDropdown();
             });
+
+            globeIcon.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleDropdown();
+                } else if (e.key === 'ArrowDown' && !dropdown.classList.contains('show')) {
+                    e.preventDefault();
+                    openDropdown();
+                }
+            });
+
+            dropdown.addEventListener('keydown', function(e) {
+                const items = dropdown.querySelectorAll('.dropdown-item');
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    focusedIndex = (focusedIndex + 1) % items.length;
+                    items[focusedIndex].focus();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    focusedIndex = (focusedIndex - 1 + items.length) % items.length;
+                    items[focusedIndex].focus();
+                } else if (e.key === 'Escape') {
+                    closeDropdown();
+                    globeIcon.focus();
+                } else if (e.key === 'Home') {
+                    e.preventDefault();
+                    focusedIndex = 0;
+                    items[focusedIndex].focus();
+                } else if (e.key === 'End') {
+                    e.preventDefault();
+                    focusedIndex = items.length - 1;
+                    items[focusedIndex].focus();
+                }
+            });
+
             document.addEventListener('click', function() {
-                dropdown.classList.remove('show');
+                closeDropdown();
             });
 
             window.addEventListener('message', function(event) {
@@ -262,12 +430,13 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
                         currentLang.textContent = langs[msg.language] || msg.language;
                     }
                 } else if (msg.type === 'loading') {
-                    content.innerHTML = '<div class="loading"><div class="spinner"></div><span>Translating...</span></div>';
+                    content.innerHTML = '<div class="loading" role="status" aria-label="Translating"><div class="spinner"></div><span>Translating...</span></div>';
                 } else if (msg.type === 'error') {
                     // Safe error display without innerHTML injection
                     content.innerHTML = '';
                     const errorDiv = document.createElement('div');
                     errorDiv.className = 'error';
+                    errorDiv.setAttribute('role', 'alert');
                     errorDiv.textContent = msg.message;
                     content.appendChild(errorDiv);
                 } else if (msg.type === 'scroll') {
@@ -288,6 +457,10 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
 
 let provider: TranslateViewProvider;
 
+/**
+ * Activates the extension
+ * Called when a Markdown file is opened
+ */
 export function activate(context: vscode.ExtensionContext): void {
     provider = new TranslateViewProvider(context.extensionUri);
 
@@ -295,29 +468,34 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.registerWebviewViewProvider(TranslateViewProvider.viewType, provider),
         vscode.commands.registerCommand('translateView.open', () => vscode.commands.executeCommand('translateView.webview.focus')),
         vscode.window.onDidChangeActiveTextEditor((editor) => {
-            if (editor?.document.languageId === 'markdown') {
+            if (editor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
                 provider.updateContent(editor.document);
             }
         }),
         vscode.workspace.onDidChangeTextDocument((event) => {
             const editor = vscode.window.activeTextEditor;
-            if (editor && event.document === editor.document && event.document.languageId === 'markdown') {
+            if (editor && event.document === editor.document && event.document.languageId === MARKDOWN_LANGUAGE_ID) {
                 provider.updateContent(event.document);
             }
         }),
         vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
-            if (event.textEditor.document.languageId === 'markdown' && event.visibleRanges.length > 0) {
+            if (event.textEditor.document.languageId === MARKDOWN_LANGUAGE_ID && event.visibleRanges.length > 0) {
                 provider.syncScroll(event.visibleRanges[0].start.line);
             }
         }),
         { dispose: () => provider.dispose() }
     );
 
-    if (vscode.window.activeTextEditor?.document.languageId === 'markdown') {
-        provider.updateContent(vscode.window.activeTextEditor.document);
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
+        provider.updateContent(activeEditor.document);
     }
 }
 
+/**
+ * Deactivates the extension
+ */
 export function deactivate(): void {
     provider?.dispose();
+    cachedModel = undefined;
 }
