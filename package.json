@@ -1,7 +1,7 @@
 {
   "name": "translate-view",
   "displayName": "Translate View",
-  "description": "Markdownファイルをリアルタイムで翻訳し、サイドビューに表示するVSCode拡張機能",
+  "description": "Translate Markdown files in real-time and display in a side view",
   "version": "0.0.1",
   "publisher": "translate-view",
   "engines": {
@@ -60,7 +60,7 @@
             "Português (Brasil)",
             "Русский"
           ],
-          "description": "翻訳先の言語"
+          "description": "Target language for translation"
         },
         "translateView.apiKey": {
           "type": "string",
@@ -87,8 +87,5 @@
     "@vscode/vsce": "^3.x",
     "eslint": "^8.x",
     "typescript": "^4.x"
-  },
-  "dependencies": {
-    "marked": "^4.x"
   }
 }

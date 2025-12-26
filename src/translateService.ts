@@ -15,17 +15,13 @@ export class TranslateService {
 
         if (!apiKey) {
             // If no API key, convert Markdown to HTML (demo mode)
-            return this._convertMarkdownToHtml(content, targetLanguage);
+            return this._convertMarkdownToHtml(content);
         }
 
-        try {
-            const translatedContent = await this._callTranslateApi(content, targetLanguage, apiKey);
-            const htmlContent = this._convertMarkdownToHtml(translatedContent, targetLanguage);
-            this._cache.set(cacheKey, htmlContent);
-            return htmlContent;
-        } catch (error) {
-            throw error;
-        }
+        const translatedContent = await this._callTranslateApi(content, targetLanguage, apiKey);
+        const htmlContent = this._convertMarkdownToHtml(translatedContent);
+        this._cache.set(cacheKey, htmlContent);
+        return htmlContent;
     }
 
     private async _callTranslateApi(content: string, targetLanguage: string, apiKey: string): Promise<string> {
@@ -76,7 +72,7 @@ export class TranslateService {
         return data.choices[0]?.message?.content || content;
     }
 
-    private _convertMarkdownToHtml(markdown: string, targetLanguage: string): string {
+    private _convertMarkdownToHtml(markdown: string): string {
         const lines = markdown.split('\n');
         let html = '';
         let inCodeBlock = false;
