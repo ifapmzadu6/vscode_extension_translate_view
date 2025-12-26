@@ -27,7 +27,6 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-        // Handle messages from WebView
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
                 case 'changeLanguage':
@@ -53,7 +52,6 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         this._currentDocument = document;
 
-        // Debounce
         if (this._debounceTimer) {
             clearTimeout(this._debounceTimer);
         }
@@ -63,8 +61,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             const targetLanguage = vscode.workspace.getConfiguration('translateView').get<string>('targetLanguage') || 'ja';
 
             this._view!.webview.postMessage({
-                type: 'loading',
-                message: 'Translating...'
+                type: 'loading'
             });
 
             try {
@@ -73,7 +70,6 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
                 this._view!.webview.postMessage({
                     type: 'update',
                     content: translatedContent,
-                    originalContent: content,
                     language: targetLanguage
                 });
             } catch (error) {
@@ -111,24 +107,26 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             padding: 0;
         }
         body {
-            font-family: var(--vscode-font-family);
-            font-size: var(--vscode-font-size);
+            font-family: var(--vscode-editor-font-family);
+            font-size: var(--vscode-editor-font-size);
             color: var(--vscode-foreground);
             background-color: var(--vscode-editor-background);
-            padding: 10px;
-            line-height: 1.6;
+            line-height: 1.5;
         }
         .header {
+            position: sticky;
+            top: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 8px 0;
+            padding: 8px 12px;
+            background-color: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-panel-border);
-            margin-bottom: 16px;
+            z-index: 10;
         }
         .title {
             font-weight: bold;
-            font-size: 14px;
+            font-size: 12px;
         }
         .language-selector {
             display: flex;
@@ -137,7 +135,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
         }
         .globe-icon {
             cursor: pointer;
-            font-size: 18px;
+            font-size: 16px;
             opacity: 0.8;
             transition: opacity 0.2s;
         }
@@ -156,15 +154,16 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             border: 1px solid var(--vscode-dropdown-border);
             border-radius: 4px;
             min-width: 120px;
-            z-index: 1;
+            z-index: 100;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
         .dropdown-content.show {
             display: block;
         }
         .dropdown-item {
-            padding: 8px 12px;
+            padding: 6px 12px;
             cursor: pointer;
+            font-size: 12px;
             color: var(--vscode-dropdown-foreground);
         }
         .dropdown-item:hover {
@@ -175,55 +174,24 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             color: var(--vscode-list-activeSelectionForeground);
         }
         .content {
-            padding: 8px 0;
-        }
-        .content h1 { font-size: 1.8em; margin: 16px 0 8px; }
-        .content h2 { font-size: 1.5em; margin: 14px 0 7px; }
-        .content h3 { font-size: 1.3em; margin: 12px 0 6px; }
-        .content h4 { font-size: 1.1em; margin: 10px 0 5px; }
-        .content p { margin: 8px 0; }
-        .content ul, .content ol { margin: 8px 0; padding-left: 24px; }
-        .content li { margin: 4px 0; }
-        .content code {
-            background-color: var(--vscode-textCodeBlock-background);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: var(--vscode-editor-font-family);
-        }
-        .content pre {
-            background-color: var(--vscode-textCodeBlock-background);
             padding: 12px;
-            border-radius: 4px;
-            overflow-x: auto;
-            margin: 12px 0;
         }
-        .content pre code {
-            padding: 0;
-            background: none;
-        }
-        .content blockquote {
-            border-left: 3px solid var(--vscode-textBlockQuote-border);
-            padding-left: 12px;
-            margin: 12px 0;
-            color: var(--vscode-textBlockQuote-foreground);
-        }
-        .content a {
-            color: var(--vscode-textLink-foreground);
-            text-decoration: none;
-        }
-        .content a:hover {
-            text-decoration: underline;
+        .line {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            min-height: 1.5em;
+            scroll-margin-top: 40px;
         }
         .loading {
             display: flex;
             align-items: center;
             gap: 8px;
             color: var(--vscode-descriptionForeground);
-            padding: 20px;
+            padding: 20px 12px;
         }
         .spinner {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             border: 2px solid var(--vscode-progressBar-background);
             border-top-color: transparent;
             border-radius: 50%;
@@ -238,16 +206,12 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             background-color: var(--vscode-inputValidation-errorBackground);
             border: 1px solid var(--vscode-inputValidation-errorBorder);
             border-radius: 4px;
-            margin: 12px 0;
+            margin: 12px;
         }
         .placeholder {
             color: var(--vscode-descriptionForeground);
             font-style: italic;
-            padding: 20px;
-            text-align: center;
-        }
-        [data-line] {
-            scroll-margin-top: 20px;
+            padding: 20px 12px;
         }
     </style>
 </head>
@@ -263,7 +227,7 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
         </div>
     </div>
     <div class="content" id="content">
-        <div class="placeholder">Please open a Markdown file</div>
+        <span class="placeholder">Please open a Markdown file</span>
     </div>
 
     <script nonce="${nonce}">
@@ -289,7 +253,6 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
 
         let selectedLanguage = 'ja';
 
-        // Build dropdown items
         Object.entries(languageNames).forEach(([lang, name]) => {
             const item = document.createElement('div');
             item.className = 'dropdown-item';
@@ -304,14 +267,12 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             dropdown.appendChild(item);
         });
 
-        // Toggle dropdown
         globeIcon.addEventListener('click', (e) => {
             e.stopPropagation();
             dropdown.classList.toggle('show');
             updateDropdownSelection();
         });
 
-        // Close dropdown on outside click
         document.addEventListener('click', () => {
             dropdown.classList.remove('show');
         });
@@ -322,33 +283,45 @@ export class TranslateViewProvider implements vscode.WebviewViewProvider {
             });
         }
 
-        // Receive messages
         window.addEventListener('message', event => {
             const message = event.data;
             switch (message.type) {
                 case 'update':
-                    content.innerHTML = message.content;
+                    content.innerHTML = '';
+                    const lines = message.content.split('\\n');
+                    lines.forEach((line, index) => {
+                        const div = document.createElement('div');
+                        div.className = 'line';
+                        div.dataset.line = index.toString();
+                        div.textContent = line;
+                        content.appendChild(div);
+                    });
                     if (message.language) {
                         selectedLanguage = message.language;
                         currentLang.textContent = languageNames[message.language] || message.language;
                     }
                     break;
                 case 'loading':
-                    content.innerHTML = '<div class="loading"><div class="spinner"></div><span>' + message.message + '</span></div>';
+                    content.innerHTML = '<div class="loading"><div class="spinner"></div><span>Translating...</span></div>';
                     break;
                 case 'error':
-                    content.innerHTML = '<div class="error">' + message.message + '</div>';
+                    content.innerHTML = '<div class="error">' + escapeHtml(message.message) + '</div>';
                     break;
                 case 'scroll':
-                    const targetElement = document.querySelector('[data-line="' + message.line + '"]');
-                    if (targetElement) {
-                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    const target = document.querySelector('[data-line="' + message.line + '"]');
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
                     break;
             }
         });
 
-        // Notify ready
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         vscode.postMessage({ type: 'ready' });
     </script>
 </body>
