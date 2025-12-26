@@ -47,15 +47,20 @@ ${content}`;
 
         const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 
-        const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+        const cancellationTokenSource = new vscode.CancellationTokenSource();
+        try {
+            const response = await model.sendRequest(messages, {}, cancellationTokenSource.token);
 
-        // Collect response chunks
-        let result = '';
-        for await (const chunk of response.text) {
-            result += chunk;
+            // Collect response chunks
+            let result = '';
+            for await (const chunk of response.text) {
+                result += chunk;
+            }
+
+            return result || content;
+        } finally {
+            cancellationTokenSource.dispose();
         }
-
-        return result || content;
     }
 
     private _convertMarkdownToHtml(markdown: string): string {
