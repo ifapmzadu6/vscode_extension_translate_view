@@ -75,6 +75,7 @@
     "build": "npm run compile && vsce package"
   },
   "devDependencies": {
+    "@eslint/js": "^9.x",
     "@types/node": "^22.x",
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^8.x",
