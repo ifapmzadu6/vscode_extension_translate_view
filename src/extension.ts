@@ -122,20 +122,95 @@ ${content}`;
 }
 
 /**
- * Webview provider for the translation view panel
+ * Manages the translation webview panel displayed on the right side
  */
-class TranslateViewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'translateView.webview';
-    private _view?: vscode.WebviewView;
+class TranslateViewPanel {
+    private static _instance: TranslateViewPanel | undefined;
+    private _panel: vscode.WebviewPanel;
     private _currentDocument?: vscode.TextDocument;
     private _debounceTimer?: ReturnType<typeof setTimeout>;
     private _isTranslating = false;
     private _pendingDocument?: vscode.TextDocument;
+    private _disposables: vscode.Disposable[] = [];
 
-    constructor(private readonly _extensionUri: vscode.Uri) {}
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+        this._panel = panel;
+
+        this._panel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [extensionUri]
+        };
+        this._panel.webview.html = this._getHtml(this._panel.webview);
+
+        this._panel.webview.onDidReceiveMessage(
+            async (data: IncomingMessage) => {
+                if (data.type === MessageType.ChangeLanguage && data.language) {
+                    if (!isValidLanguage(data.language)) {
+                        console.error(`[TranslateView] Invalid language code received: ${data.language}`);
+                        return;
+                    }
+                    await vscode.workspace.getConfiguration('translateView').update('targetLanguage', data.language, vscode.ConfigurationTarget.Global);
+                    if (this._currentDocument) {
+                        this.updateContent(this._currentDocument);
+                    }
+                } else if (data.type === MessageType.Ready) {
+                    const editor = vscode.window.activeTextEditor;
+                    if (editor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
+                        this.updateContent(editor.document);
+                    }
+                }
+            },
+            null,
+            this._disposables
+        );
+
+        this._panel.onDidDispose(
+            () => {
+                TranslateViewPanel._instance = undefined;
+                this.dispose();
+            },
+            null,
+            this._disposables
+        );
+    }
+
+    public static createOrShow(extensionUri: vscode.Uri): TranslateViewPanel {
+        // If panel already exists, reveal it
+        if (TranslateViewPanel._instance) {
+            TranslateViewPanel._instance._panel.reveal(vscode.ViewColumn.Beside, true);
+            return TranslateViewPanel._instance;
+        }
+
+        // Create new panel on the right side (beside the current editor)
+        const panel = vscode.window.createWebviewPanel(
+            'translateView',
+            'Translate View',
+            {
+                viewColumn: vscode.ViewColumn.Beside,
+                preserveFocus: true
+            },
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true
+            }
+        );
+
+        TranslateViewPanel._instance = new TranslateViewPanel(panel, extensionUri);
+        return TranslateViewPanel._instance;
+    }
+
+    public static getInstance(): TranslateViewPanel | undefined {
+        return TranslateViewPanel._instance;
+    }
 
     public dispose(): void {
         this.clearDebounceTimer();
+        while (this._disposables.length) {
+            const disposable = this._disposables.pop();
+            if (disposable) {
+                disposable.dispose();
+            }
+        }
     }
 
     private clearDebounceTimer(): void {
@@ -145,49 +220,13 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    /**
-     * Sends a message to the webview with type safety
-     */
     private postMessage(message: OutgoingMessage): void {
-        this._view?.webview.postMessage(message);
+        this._panel.webview.postMessage(message);
     }
 
-    public resolveWebviewView(webviewView: vscode.WebviewView): void {
-        this._view = webviewView;
-        webviewView.webview.options = { enableScripts: true, localResourceRoots: [this._extensionUri] };
-        webviewView.webview.html = this._getHtml(webviewView.webview);
-
-        webviewView.webview.onDidReceiveMessage(async (data: IncomingMessage) => {
-            if (data.type === MessageType.ChangeLanguage && data.language) {
-                // Validate language before saving
-                if (!isValidLanguage(data.language)) {
-                    console.error(`[TranslateView] Invalid language code received: ${data.language}`);
-                    return;
-                }
-                await vscode.workspace.getConfiguration('translateView').update('targetLanguage', data.language, vscode.ConfigurationTarget.Global);
-                if (this._currentDocument) {
-                    this.updateContent(this._currentDocument);
-                }
-            } else if (data.type === MessageType.Ready) {
-                const editor = vscode.window.activeTextEditor;
-                if (editor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
-                    this.updateContent(editor.document);
-                }
-            }
-        });
-    }
-
-    /**
-     * Updates the translation view with the content of the given document
-     * Uses debouncing to prevent excessive API calls during rapid edits
-     */
     public async updateContent(document: vscode.TextDocument): Promise<void> {
-        if (!this._view) {
-            return;
-        }
         this._currentDocument = document;
 
-        // If translation is in progress, save as pending and return
         if (this._isTranslating) {
             this._pendingDocument = document;
             return;
@@ -204,10 +243,6 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async _executeTranslation(document: vscode.TextDocument): Promise<void> {
-        if (!this._view) {
-            return;
-        }
-
         this._isTranslating = true;
         this._pendingDocument = undefined;
 
@@ -226,7 +261,6 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         } finally {
             this._isTranslating = false;
 
-            // If there's a pending document, translate it now
             if (this._pendingDocument) {
                 const pending = this._pendingDocument;
                 this._pendingDocument = undefined;
@@ -235,9 +269,6 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    /**
-     * Synchronizes scroll position with the editor
-     */
     public syncScroll(lineNumber: number): void {
         this.postMessage({ type: MessageType.Scroll, line: lineNumber });
     }
@@ -436,40 +467,57 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
     }
 }
 
-let provider: TranslateViewProvider;
-
 /**
  * Activates the extension
  * Called when a Markdown file is opened
  */
 export function activate(context: vscode.ExtensionContext): void {
-    provider = new TranslateViewProvider(context.extensionUri);
-
+    // Register the command to open the translate view
     context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(TranslateViewProvider.viewType, provider),
-        vscode.commands.registerCommand('translateView.open', () => vscode.commands.executeCommand('translateView.webview.focus')),
-        vscode.window.onDidChangeActiveTextEditor((editor) => {
-            if (editor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
-                provider.updateContent(editor.document);
-            }
-        }),
-        vscode.workspace.onDidChangeTextDocument((event) => {
+        vscode.commands.registerCommand('translateView.open', () => {
+            const panel = TranslateViewPanel.createOrShow(context.extensionUri);
             const editor = vscode.window.activeTextEditor;
-            if (editor && event.document === editor.document && event.document.languageId === MARKDOWN_LANGUAGE_ID) {
-                provider.updateContent(event.document);
+            if (editor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
+                panel.updateContent(editor.document);
             }
-        }),
-        vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
-            if (event.textEditor.document.languageId === MARKDOWN_LANGUAGE_ID && event.visibleRanges.length > 0) {
-                provider.syncScroll(event.visibleRanges[0].start.line);
-            }
-        }),
-        { dispose: () => provider.dispose() }
+        })
     );
 
+    // Auto-update when active editor changes
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor((editor) => {
+            const panel = TranslateViewPanel.getInstance();
+            if (panel && editor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
+                panel.updateContent(editor.document);
+            }
+        })
+    );
+
+    // Auto-update when document content changes
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeTextDocument((event) => {
+            const panel = TranslateViewPanel.getInstance();
+            const editor = vscode.window.activeTextEditor;
+            if (panel && editor && event.document === editor.document && event.document.languageId === MARKDOWN_LANGUAGE_ID) {
+                panel.updateContent(event.document);
+            }
+        })
+    );
+
+    // Sync scroll position
+    context.subscriptions.push(
+        vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
+            const panel = TranslateViewPanel.getInstance();
+            if (panel && event.textEditor.document.languageId === MARKDOWN_LANGUAGE_ID && event.visibleRanges.length > 0) {
+                panel.syncScroll(event.visibleRanges[0].start.line);
+            }
+        })
+    );
+
+    // Auto-open when a Markdown file is already active
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor?.document.languageId === MARKDOWN_LANGUAGE_ID) {
-        provider.updateContent(activeEditor.document);
+        TranslateViewPanel.createOrShow(context.extensionUri);
     }
 }
 
@@ -477,6 +525,5 @@ export function activate(context: vscode.ExtensionContext): void {
  * Deactivates the extension
  */
 export function deactivate(): void {
-    provider?.dispose();
     cachedModel = undefined;
 }
