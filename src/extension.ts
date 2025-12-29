@@ -254,13 +254,10 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); color: var(--vscode-foreground); background-color: var(--vscode-editor-background); line-height: 1.5; }
-        .header { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background-color: var(--vscode-editor-background); border-bottom: 1px solid var(--vscode-panel-border); z-index: 10; }
-        .title { font-weight: bold; font-size: 12px; }
-        .language-selector { display: flex; align-items: center; gap: 8px; }
-        .globe-icon { cursor: pointer; font-size: 16px; opacity: 0.8; transition: opacity 0.2s; }
-        .globe-icon:hover { opacity: 1; }
-        .language-dropdown { position: relative; display: inline-block; }
-        .dropdown-content { display: none; position: absolute; right: 0; background-color: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); border-radius: 4px; min-width: 120px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+        .floating-language-selector { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+        .globe-icon { cursor: pointer; font-size: 20px; opacity: 0.7; transition: all 0.2s; background-color: var(--vscode-button-background); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        .globe-icon:hover { opacity: 1; transform: scale(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+        .dropdown-content { display: none; position: absolute; bottom: 50px; right: 0; background-color: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); border-radius: 4px; min-width: 160px; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
         .dropdown-content.show { display: block; }
         .dropdown-item { padding: 6px 12px; cursor: pointer; font-size: 12px; color: var(--vscode-dropdown-foreground); }
         .dropdown-item:hover { background-color: var(--vscode-list-hoverBackground); }
@@ -275,24 +272,17 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
     </style>
 </head>
 <body>
-    <div class="header">
-        <span class="title">Translation</span>
-        <div class="language-selector">
-            <span id="currentLang" aria-live="polite">日本語</span>
-            <div class="language-dropdown">
-                <span class="globe-icon" id="globeIcon" role="button" tabindex="0" aria-label="Change translation language" aria-haspopup="listbox" aria-expanded="false">🌐</span>
-                <div class="dropdown-content" id="dropdown" role="listbox" aria-label="Select language"></div>
-            </div>
-        </div>
-    </div>
     <div class="content" id="content" role="region" aria-label="Translated content" aria-live="polite"><span class="placeholder">Please open a Markdown file</span></div>
+    <div class="floating-language-selector">
+        <span class="globe-icon" id="globeIcon" role="button" tabindex="0" aria-label="Change translation language" aria-haspopup="listbox" aria-expanded="false">🌐</span>
+        <div class="dropdown-content" id="dropdown" role="listbox" aria-label="Select language"></div>
+    </div>
     <script nonce="${nonce}">
         (function() {
             const vscode = acquireVsCodeApi();
             const content = document.getElementById('content');
             const dropdown = document.getElementById('dropdown');
             const globeIcon = document.getElementById('globeIcon');
-            const currentLang = document.getElementById('currentLang');
             const langs = { 'en': 'English', 'ja': '日本語', 'zh-hans': '中文（简体）', 'zh-hant': '中文（繁體）', 'ko': '한국어', 'de': 'Deutsch', 'fr': 'Français', 'es': 'Español', 'it': 'Italiano', 'pt-br': 'Português (Brasil)', 'ru': 'Русский' };
             let selectedLanguage = 'ja';
             let focusedIndex = -1;
@@ -303,7 +293,6 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
 
             function selectLanguage(lang, name) {
                 selectedLanguage = lang;
-                currentLang.textContent = name;
                 closeDropdown();
                 vscode.postMessage({ type: 'changeLanguage', language: lang });
             }
@@ -420,7 +409,6 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
                     content.appendChild(fragment);
                     if (msg.language) {
                         selectedLanguage = msg.language;
-                        currentLang.textContent = langs[msg.language] || msg.language;
                     }
                 } else if (msg.type === 'loading') {
                     content.innerHTML = '<div class="loading" role="status" aria-label="Translating"><div class="spinner"></div><span>Translating...</span></div>';
