@@ -18,6 +18,9 @@ const MessageType = {
     Loading: 'loading',
     Error: 'error',
     Scroll: 'scroll',
+    StreamingStart: 'streamingStart',
+    StreamingChunk: 'streamingChunk',
+    StreamingEnd: 'streamingEnd',
 } as const;
 
 type MessageTypeValue = typeof MessageType[keyof typeof MessageType];
@@ -76,12 +79,18 @@ const LANGUAGE_NAMES: Record<ValidLanguage, string> = {
 let cachedModel: vscode.LanguageModelChat | undefined;
 
 /**
- * Translates Markdown content to the target language using VSCode Language Model API
+ * Callback type for streaming translation chunks
+ */
+type StreamingCallback = (chunk: string) => void;
+
+/**
+ * Translates Markdown content to the target language using VSCode Language Model API with streaming support
  * @param content - The Markdown content to translate
  * @param targetLanguage - Target language code (e.g., 'ja', 'en')
+ * @param onChunk - Optional callback function called for each chunk received
  * @returns Translated content or throws an error if translation fails
  */
-async function translate(content: string, targetLanguage: string): Promise<string> {
+async function translate(content: string, targetLanguage: string, onChunk?: StreamingCallback): Promise<string> {
     // Use cached model if available, otherwise select and cache
     if (!cachedModel) {
         const models = await vscode.lm.selectChatModels();
@@ -104,6 +113,10 @@ ${content}`;
         const chunks: string[] = [];
         for await (const chunk of response.text) {
             chunks.push(chunk);
+            // Call streaming callback if provided
+            if (onChunk) {
+                onChunk(chunk);
+            }
         }
         const result = chunks.join('');
         if (!result) {
@@ -230,11 +243,17 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
         const configuredLanguage = vscode.workspace.getConfiguration('translateView').get<string>('targetLanguage');
         const targetLanguage = (configuredLanguage && isValidLanguage(configuredLanguage)) ? configuredLanguage : DEFAULT_LANGUAGE;
 
-        this.postMessage({ type: MessageType.Loading });
+        // Send streaming start message
+        this.postMessage({ type: MessageType.StreamingStart, language: targetLanguage });
 
         try {
-            const translatedContent = await translate(content, targetLanguage);
-            this.postMessage({ type: MessageType.Update, content: translatedContent, language: targetLanguage });
+            // Use streaming callback to send chunks as they arrive
+            const translatedContent = await translate(content, targetLanguage, (chunk: string) => {
+                this.postMessage({ type: MessageType.StreamingChunk, content: chunk });
+            });
+
+            // Send streaming end message with final content for fallback
+            this.postMessage({ type: MessageType.StreamingEnd, content: translatedContent, language: targetLanguage });
         } catch (error) {
             console.error('[TranslateView] Translation error:', error);
             this.postMessage({ type: MessageType.Error, message: getErrorMessage(error) });
@@ -301,6 +320,27 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
 
             // Build line elements map for efficient lookup
             const lineElements = new Map();
+
+            // Streaming state
+            let streamingBuffer = '';
+            let isStreaming = false;
+
+            // Render streaming content - updates display with current buffer
+            function renderStreamingContent() {
+                lineElements.clear();
+                const fragment = document.createDocumentFragment();
+                const lines = streamingBuffer.split('\\n');
+                lines.forEach(function(line, i) {
+                    const div = document.createElement('div');
+                    div.className = 'line';
+                    div.dataset.line = i.toString();
+                    div.textContent = line;
+                    lineElements.set(i, div);
+                    fragment.appendChild(div);
+                });
+                content.innerHTML = '';
+                content.appendChild(fragment);
+            }
 
             function selectLanguage(lang, name) {
                 selectedLanguage = lang;
@@ -402,8 +442,32 @@ class TranslateViewProvider implements vscode.WebviewViewProvider {
 
             window.addEventListener('message', function(event) {
                 const msg = event.data;
-                if (msg.type === 'update') {
-                    // Clear line elements map
+                if (msg.type === 'streamingStart') {
+                    // Start streaming: reset buffer and show initial state
+                    streamingBuffer = '';
+                    isStreaming = true;
+                    content.innerHTML = '<div class="loading" role="status" aria-label="Translating"><div class="spinner"></div><span>Translating...</span></div>';
+                    if (msg.language) {
+                        selectedLanguage = msg.language;
+                    }
+                } else if (msg.type === 'streamingChunk') {
+                    // Append chunk to buffer and re-render
+                    if (isStreaming) {
+                        streamingBuffer += msg.content;
+                        renderStreamingContent();
+                    }
+                } else if (msg.type === 'streamingEnd') {
+                    // Streaming complete: finalize display
+                    isStreaming = false;
+                    if (msg.content) {
+                        streamingBuffer = msg.content;
+                        renderStreamingContent();
+                    }
+                    if (msg.language) {
+                        selectedLanguage = msg.language;
+                    }
+                } else if (msg.type === 'update') {
+                    // Legacy update (non-streaming): Clear line elements map
                     lineElements.clear();
                     // Use DocumentFragment for efficient DOM updates
                     const fragment = document.createDocumentFragment();
