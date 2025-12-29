@@ -15,6 +15,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "translateViewContainer",
+          "title": "Translate View",
+          "icon": "$(globe)"
+        }
+      ]
+    },
+    "views": {
+      "translateViewContainer": [
+        {
+          "type": "webview",
+          "id": "translateView.view",
+          "name": "Translation"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "translateView.open",
