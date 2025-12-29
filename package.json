@@ -22,24 +22,6 @@
         "category": "Translate View"
       }
     ],
-    "viewsContainers": {
-      "panel": [
-        {
-          "id": "translateViewContainer",
-          "title": "Translate View",
-          "icon": "$(globe)"
-        }
-      ]
-    },
-    "views": {
-      "translateViewContainer": [
-        {
-          "type": "webview",
-          "id": "translateView.webview",
-          "name": "Translation"
-        }
-      ]
-    },
     "configuration": {
       "title": "Translate View",
       "properties": {
